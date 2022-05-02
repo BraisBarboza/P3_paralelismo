@@ -12,7 +12,7 @@ int main(int argc, char *argv[] ) {
   float matrix[N][N];
   float vector[N];
   float result[N];
-  struct timeval  tv1, tv2;
+  struct timeval  t_comms_1, t_comms_2, t_comp_1, t_comp_2;
 
 
   MPI_Init (&argc, &argv);
@@ -42,9 +42,10 @@ int main(int argc, char *argv[] ) {
     }
   }
 //
+  gettimeofday(&t_comms_1, NULL);
   MPI_Scatter(matrix,total_sent,MPI_INT,mymatrix,total_sent,MPI_INT,0,MPI_COMM_WORLD);
 //
-  gettimeofday(&tv1, NULL);
+  gettimeofday(&t_comp_1, NULL);
 //
   for(i=0;i<rows_sent;i++) {
     result[i]=0;
@@ -53,18 +54,35 @@ int main(int argc, char *argv[] ) {
     }
   }
 //
-  gettimeofday(&tv2, NULL);
+  gettimeofday(&t_comp_2, NULL);
 //  
   MPI_Gather(result,rows_sent,MPI_INT,vector,rows_sent,MPI_INT,0,MPI_COMM_WORLD);
 //
-  int microseconds = (tv2.tv_usec - tv1.tv_usec)+ 1000000 * (tv2.tv_sec - tv1.tv_sec);
+  gettimeofday(&t_comms_2, NULL);
+  int comp = (t_comp_2.tv_usec - t_comp_1.tv_usec)+ 1000000 * (t_comp_2.tv_sec - t_comp_1.tv_sec);
+  int comms = (t_comms_2.tv_usec - t_comms_1.tv_usec)+ 1000000 * (t_comms_2.tv_sec - t_comms_1.tv_sec);
+  comms= comms-comp;
+  if(!DEBUG){
+    if(rank){
+      MPI_Send(&comms,1,MPI_INT,0,0,MPI_COMM_WORLD);
+      MPI_Send(&comp,1,MPI_INT,0,1,MPI_COMM_WORLD);
+    }
+  }
+
   if(!rank){
     if (DEBUG){
       for(i=0;i<N;i++) {
         printf(" %f \t ",vector[i]);
       }
     } else {
-      printf ("Time (seconds) = %lf\n", (double) microseconds/1E6);
+      printf ("Time (seconds) for the communications of process %d = %lf\n",rank,  (double) comms/1E6);
+      printf ("Time (seconds) for the computation of process %d = %lf\n",rank,  (double) comp/1E6);
+      for(i=1;i<numprocs;i++){
+      MPI_Recv(&comms,1,MPI_INT,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+      MPI_Recv(&comp,1,MPI_INT,i,1,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+      printf ("Time (seconds) for the communications of process %d = %lf\n",i,  (double) comms/1E6);
+      printf ("Time (seconds) for the computation of process %d = %lf\n",i,  (double) comp/1E6);
+      }
     }    
   }
 //
